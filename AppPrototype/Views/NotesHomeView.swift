@@ -15,6 +15,14 @@ struct NotesHomeView: View {
                 }
             }
             .navigationTitle("Secure Notes")
+            .alert("Secure Notes", isPresented: Binding(
+                get: { feature.errorMessage != nil },
+                set: { if !$0 { feature.errorMessage = nil } }
+            )) {
+                Button("OK") { feature.errorMessage = nil }
+            } message: {
+                Text(feature.errorMessage ?? "")
+            }
         }
     }
 
@@ -38,22 +46,24 @@ struct NotesHomeView: View {
                     NoteRowView(
                         note: note,
                         onOpen: { feature.select(note) },
-                        onTogglePin: { feature.togglePin(note) },
-                        onArchive: { feature.archive(note) }
+                        onTogglePin: { Task { await feature.togglePin(note) } },
+                        onArchive: { Task { await feature.archive(note) } }
                     )
                 }
             }
 
-            Section("Security Posture") {
-                Label("Local-first storage keeps notes available offline.", systemImage: "internaldrive")
-                Label("Future milestones include Keychain-backed keys and biometric gating.", systemImage: "faceid")
-            }
         }
+        .disabled(feature.isBusy)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Lock") { feature.lock() }
+                    .disabled(feature.isBusy)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("New") {
                     feature.beginNewNote()
                 }
+                .disabled(feature.isBusy)
             }
         }
         .sheet(item: Binding(
