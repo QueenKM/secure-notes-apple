@@ -12,14 +12,15 @@ struct UnlockGateView: View {
             Text("Secure Notes")
                 .font(.largeTitle.weight(.bold))
 
-            Text("Use Face ID, Touch ID, or your local passphrase to unlock encrypted notes.")
+            Text("Use Face ID, Touch ID, or your device passcode to unlock encrypted notes.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
 
-            Button("Unlock Prototype") {
-                feature.unlock()
+            Button("Unlock") {
+                Task { await feature.unlock() }
             }
+            .disabled(feature.isBusy)
             .buttonStyle(.borderedProminent)
         }
         .padding(32)
