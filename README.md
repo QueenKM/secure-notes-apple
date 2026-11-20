@@ -38,11 +38,11 @@ swift test
 
 ## Open the iOS prototype
 
-On macOS with Xcode and XcodeGen installed, run `xcodegen generate` in the repository root. Open `SecureNotes.xcodeproj` and run the SecureNotes scheme in an iOS 17 or later simulator. The prototype uses sample data and its unlock button is a UI demonstration. Use synthetic notes while the Keychain and persistent-storage integration is under development.
+On macOS with Xcode and XcodeGen installed, run `xcodegen generate` in the repository root. Open `SecureNotes.xcodeproj` and run the SecureNotes scheme in an iOS 17 or later simulator. The app starts with an empty locked vault. Use a device with a passcode configured to verify the full flow: unlock, save a note, lock, then unlock and reopen the note. The vault uses a device-local Keychain key and a file containing encrypted note envelopes. The key is not shared across devices.
 
 ## Planned App Features
 
-- local encrypted notes with biometric unlock
+- local encrypted notes with biometric or device-passcode unlock
 - tags and favorites
 - pin / archive flows
 - export and secure share sheet
@@ -59,7 +59,7 @@ On macOS with Xcode and XcodeGen installed, run `xcodegen generate` in the repos
 ## Next Milestones
 
 1. Build and verify the generated app target on an iOS simulator
-2. Add Keychain-backed key material storage
+2. Verify Keychain access on a physical device with Face ID or Touch ID
 3. Add search, note locking, and archive flows
 4. Add secure export and sync architecture notes
 
