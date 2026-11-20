@@ -21,9 +21,9 @@ public struct NoteCryptoService: Sendable {
 
         return EncryptedNoteEnvelope(
             id: note.id,
-            titleHint: note.title,
+            titleHint: "",
             updatedAt: note.updatedAt,
-            tags: note.tags,
+            tags: [],
             nonce: sealed.nonce.withUnsafeBytes { Data($0) },
             ciphertext: sealed.ciphertext,
             tag: sealed.tag
