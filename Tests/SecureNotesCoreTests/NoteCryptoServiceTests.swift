@@ -17,6 +17,8 @@ func encryptDecryptRoundTrip() throws {
     let envelope = try crypto.encrypt(original, using: key)
     let decrypted = try crypto.decrypt(envelope, using: key)
 
+    #expect(envelope.titleHint.isEmpty)
+    #expect(envelope.tags.isEmpty)
     #expect(decrypted == original)
 }
 
