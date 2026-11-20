@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 import SecureNotesCore
@@ -6,19 +7,52 @@ import SecureNotesCore
 @Observable
 final class NotesFeature {
     var unlockState: UnlockState = .locked
-    var notes: [SecureNote] = [
-        SecureNote(title: "Board meeting prep", body: "Summarize security posture for Friday.", tags: ["work"], isPinned: true),
-        SecureNote(title: "Travel checklist", body: "Passport, charger, hotel reservation.", tags: ["personal"]),
-        SecureNote(title: "Vendor review", body: "Check encryption-at-rest answers and SSO support.", tags: ["security", "review"])
-    ]
+    private(set) var notes: [SecureNote] = []
+    private(set) var isBusy = false
+    var errorMessage: String?
+    private let store: FileBackedSecureNotesStore
+    private let crypto = NoteCryptoService()
+    private var key: SymmetricKey?
+
+    init(store: FileBackedSecureNotesStore) {
+        self.store = store
+    }
     var editorMode: EditorMode?
     var searchText = ""
     var draftTitle = ""
     var draftBody = ""
     var draftTags = ""
 
-    func unlock() {
-        unlockState = .unlocked
+    func unlock() async {
+        guard !isBusy, unlockState == .locked else { return }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let envelopes = try await store.list()
+            let unlockedKey = try await VaultKeychain.unlockKey(existingNotes: !envelopes.isEmpty)
+            let decrypted = try envelopes.map { try crypto.decrypt($0, using: unlockedKey) }
+            for (envelope, note) in zip(envelopes, decrypted)
+                where !envelope.titleHint.isEmpty || !envelope.tags.isEmpty {
+                try await store.save(crypto.encrypt(note, using: unlockedKey))
+            }
+            notes = decrypted
+            key = unlockedKey
+            unlockState = .unlocked
+        } catch {
+            errorMessage = "Could not unlock the vault. Check device authentication and try again."
+        }
+    }
+
+    func lock() {
+        guard !isBusy else { return }
+        unlockState = .locked
+        key = nil
+        notes.removeAll()
+        editorMode = nil
+        searchText = ""
+        draftTitle = ""
+        draftBody = ""
+        draftTags = ""
     }
 
     func beginNewNote() {
@@ -52,46 +86,64 @@ final class NotesFeature {
             }
     }
 
-    func saveDraft() {
-        let tags = draftTags
-            .split(separator: ",")
+    func saveDraft() async {
+        let tags = draftTags.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
+        var note: SecureNote
         switch editorMode {
         case .create:
-            notes.insert(
-                SecureNote(
-                    title: draftTitle,
-                    body: draftBody,
-                    tags: tags,
-                    updatedAt: .now
-                ),
-                at: 0
-            )
+            note = SecureNote(title: draftTitle, body: draftBody, tags: tags)
         case let .edit(id):
-            guard let index = notes.firstIndex(where: { $0.id == id }) else { break }
-            notes[index].title = draftTitle
-            notes[index].body = draftBody
-            notes[index].tags = tags
-            notes[index].updatedAt = .now
+            guard let existing = notes.first(where: { $0.id == id }) else { return }
+            note = existing
+            note.title = draftTitle
+            note.body = draftBody
+            note.tags = tags
+            note.updatedAt = .now
         case .none:
-            break
+            return
         }
 
-        editorMode = nil
+        if await persist(note) {
+            editorMode = nil
+            draftTitle = ""
+            draftBody = ""
+            draftTags = ""
+        }
     }
 
-    func togglePin(_ note: SecureNote) {
-        guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
-        notes[index].isPinned.toggle()
-        notes[index].updatedAt = .now
+    func togglePin(_ note: SecureNote) async {
+        guard var existing = notes.first(where: { $0.id == note.id }) else { return }
+        existing.isPinned.toggle()
+        existing.updatedAt = .now
+        _ = await persist(existing)
     }
 
-    func archive(_ note: SecureNote) {
-        guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
-        notes[index].isArchived = true
-        notes[index].updatedAt = .now
+    func archive(_ note: SecureNote) async {
+        guard var existing = notes.first(where: { $0.id == note.id }) else { return }
+        existing.isArchived = true
+        existing.updatedAt = .now
+        _ = await persist(existing)
+    }
+
+    private func persist(_ note: SecureNote) async -> Bool {
+        guard let key, !isBusy else { return false }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            try await store.save(crypto.encrypt(note, using: key))
+            if let index = notes.firstIndex(where: { $0.id == note.id }) {
+                notes[index] = note
+            } else {
+                notes.append(note)
+            }
+            return true
+        } catch {
+            errorMessage = "Could not save the encrypted note. Please try again."
+            return false
+        }
     }
 }
 
