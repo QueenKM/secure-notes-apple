@@ -13,6 +13,7 @@ final class NotesFeature {
     private let store: FileBackedSecureNotesStore
     private let crypto = NoteCryptoService()
     private var key: SymmetricKey?
+    private var lockPending = false
 
     init(store: FileBackedSecureNotesStore) {
         self.store = store
@@ -26,7 +27,7 @@ final class NotesFeature {
     func unlock() async {
         guard !isBusy, unlockState == .locked else { return }
         isBusy = true
-        defer { isBusy = false }
+        defer { finishActivity() }
         do {
             let envelopes = try await store.list()
             let unlockedKey = try await VaultKeychain.unlockKey(existingNotes: !envelopes.isEmpty)
@@ -44,7 +45,11 @@ final class NotesFeature {
     }
 
     func lock() {
-        guard !isBusy else { return }
+        if isBusy {
+            lockPending = true
+            return
+        }
+        lockPending = false
         unlockState = .locked
         key = nil
         notes.removeAll()
@@ -128,10 +133,15 @@ final class NotesFeature {
         _ = await persist(existing)
     }
 
+    private func finishActivity() {
+        isBusy = false
+        if lockPending { lock() }
+    }
+
     private func persist(_ note: SecureNote) async -> Bool {
         guard let key, !isBusy else { return false }
         isBusy = true
-        defer { isBusy = false }
+        defer { finishActivity() }
         do {
             try await store.save(crypto.encrypt(note, using: key))
             if let index = notes.firstIndex(where: { $0.id == note.id }) {
