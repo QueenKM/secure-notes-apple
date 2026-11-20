@@ -13,7 +13,9 @@ func saveListAndDeleteEnvelope() async throws {
 
     let list = await store.list()
     #expect(list.count == 1)
-    #expect(list.first?.titleHint == "Pinned note")
+    let saved = try #require(list.first)
+    #expect(saved.titleHint.isEmpty)
+    #expect(try crypto.decrypt(saved, using: key).title == "Pinned note")
 
     await store.delete(id: note.id)
     let updated = await store.list()
