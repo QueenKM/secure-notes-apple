@@ -31,6 +31,8 @@ struct NoteEditorView: View {
                     ))
                 }
             }
+            .disabled(feature.isBusy)
+            .interactiveDismissDisabled(feature.isBusy)
             .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -40,10 +42,9 @@ struct NoteEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        feature.saveDraft()
-                        dismiss()
+                        Task { await feature.saveDraft() }
                     }
-                    .disabled(feature.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(feature.isBusy || feature.draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
